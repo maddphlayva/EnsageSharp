@@ -21,7 +21,7 @@
 
         #region Static Fields
 
-        private static string VERSION = "1.0.0.2";
+        private static string VERSION = "1.0.0.3";
 
         private static readonly Dictionary<Unit, ParticleEffect> Effects = new Dictionary<Unit, ParticleEffect>();
 
@@ -77,28 +77,18 @@
 
         private static void Drawing_OnEndScene(EventArgs args)
         {
-            if (Drawing.Direct3DDevice9 == null || Drawing.Direct3DDevice9.IsDisposed || !Game.IsInGame)
-            {
-                return;
-            }
-
-            var player = ObjectMgr.LocalPlayer;
-
-            if (player == null || player.Team == Team.Observer)
-            {
-                return;
-            }
-
+            if (Drawing.Direct3DDevice9 == null || Drawing.Direct3DDevice9.IsDisposed || !Game.IsInGame) return;
+            //
             if (loaded && me.ClassID == ClassID.CDOTA_Unit_Hero_Nevermore)
             {
-                var addstr = "[ KiKRee SF Helper (" + VERSION + "): ";
-                addstr += enabled ? "Enabled" : "Disabled";
-                addstr += onlyKills ? ", Only kills" : "";
-                addstr += active ? ", Active" : "";
-                addstr += " ]";
-                addstr += " P - Toggle, L - Only Kills, D - Auto Raze";
+                var str = "[ KiKRee SF Helper (" + VERSION + "): ";
+                str += enabled ? "Enabled" : "Disabled";
+                str += onlyKills ? ", Only kills" : "";
+                str += active ? ", Active" : "";
+                str += " ]";
+                str += " P - Toggle, L - Only Kills, D - Auto Raze";
 
-                text.DrawText(null, addstr, 5, 40, Color.DarkGreen);
+                text.DrawText(null, str, 5, 40, Color.DarkGreen);
             }
 
         }
@@ -136,12 +126,7 @@
                 return;
             }
 
-            if (Game.IsPaused)
-            {
-                return;
-            }
-
-
+            if (Game.IsPaused) return;
 
             var coilLevel = shadowRaze[0].Level;
 
@@ -160,7 +145,7 @@
 
             if (active && enabled)
             {
-                var enemyHeroes = FindTargets(100);
+                var enemyHeroes = FindTargets();
                 if (enemyHeroes.Length > 0)
                 {
                     var targetHero = enemyHeroes.First();
@@ -193,8 +178,6 @@
                 //
                 switch (args.Msg)
                 {
-                    case (uint)Utils.WindowsMessages.WM_KEYDOWN:
-                        break;
                     case (uint)Utils.WindowsMessages.WM_KEYUP:
                         switch (args.WParam)
                         {
@@ -210,7 +193,7 @@
             }
         }
 
-        private static Hero[] FindTargets(float range)
+        private static Hero[] FindTargets()
         {
             return
             ObjectMgr.GetEntities<Hero>()
@@ -261,7 +244,7 @@
                 //
                 me.Attack(target);
                 raze.UseAbility();
-                Utils.Sleep(800 + Game.Ping, "raze");
+                Utils.Sleep(800 + (Game.Ping/1000), "raze");
             }
         }
         private static float CheckRazeDamage(int number, Unit hero)
