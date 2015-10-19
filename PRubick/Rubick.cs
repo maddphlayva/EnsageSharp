@@ -19,12 +19,16 @@ namespace PRubick
 
         #region Fields
 
-        private static string VERSION = "v1.0.0.0";
+        private static string VERSION = "v2.0.0.0";
+        private static bool menuOn = true;
+        private static bool loaded = false;
 
-        private static bool enabled = true;
-        private static bool spaceHold = false;
+        private static EzElement stealIfHave;
+        private static EzElement enabled;
 
-        private static Font font;
+        private static EzGUI gui;
+        private static EzElement spcat = null;
+        private static EzElement heroes = null;
 
         private static Hero myHero = null;
         private static Ability spellSteal = null;
@@ -33,7 +37,6 @@ namespace PRubick
 		};
 
         private static Dictionary<string, string> abilitiesFix = new Dictionary<string, string>();
-        private static List<ClassID> excludedHeroes = new List<ClassID>();
         private static List<string> includedAbilities = new List<string>();
 
         #endregion
@@ -42,33 +45,24 @@ namespace PRubick
 
         public static void Init()
         {
-            Game.OnUpdate += Game_OnUpdate;
-            Game.OnWndProc += Game_OnWndProc;
-            font = new Font(
+            _2DGeometry.Init(new Line(Drawing.Direct3DDevice9), new Font(
             Drawing.Direct3DDevice9,
             new FontDescription
             {
                 FaceName = "Tahoma",
-                Height = 13,
-                OutputPrecision = FontPrecision.Default,
-                Quality = FontQuality.Default
-            });
+                Height = 15,
+                OutputPrecision = FontPrecision.Outline,
+                Quality = FontQuality.Proof
+            }));
+            //
+            Game.OnUpdate += Game_OnUpdate;
+            Game.OnWndProc += Game_OnWndProc;
             Drawing.OnPreReset += Drawing_OnPreReset;
             Drawing.OnPostReset += Drawing_OnPostReset;
             Drawing.OnEndScene += Drawing_OnEndScene;
 
             // abilitiesFix
             abilitiesFix.Add("ancient_apparition_ice_blast_release", "ancient_apparition_ice_blast");
-
-            // excludedHeroes
-            excludedHeroes.Add(ClassID.CDOTA_Unit_Hero_Nevermore);
-            excludedHeroes.Add(ClassID.CDOTA_Unit_Hero_Phoenix);
-            excludedHeroes.Add(ClassID.CDOTA_Unit_Hero_Axe);
-            excludedHeroes.Add(ClassID.CDOTA_Unit_Hero_EmberSpirit);
-
-            // includedAbilities
-            includedAbilities.Add("undying_tombstone");
-            includedAbilities.Add("lone_druid_spirit_bear");
         }
 
         #endregion
@@ -77,28 +71,20 @@ namespace PRubick
 
         static void Game_OnWndProc(WndEventArgs args)
         {
-            if (!Game.IsChatOpen && Game.IsInGame)
+            if (Game.IsInGame)
             {
                 switch (args.Msg)
                 {
-                    case (uint)Utils.WindowsMessages.WM_KEYDOWN:
-                        switch (args.WParam)
-                        {
-                            case 0x20:
-                                spaceHold = true;
-                                break;
-                        }
-                        break;
                     case (uint)Utils.WindowsMessages.WM_KEYUP:
                         switch (args.WParam)
                         {
-                            case 0x20:
-                                spaceHold = false;
-                                break;
-                            case 'P':
-                                enabled = !enabled;
+                            case 0x24:
+                                menuOn = !menuOn;
                                 break;
                         }
+                        break;
+                    case (uint)Utils.WindowsMessages.WM_LBUTTONUP:
+                        EzGUI.MouseClick(gui.Main);
                         break;
                 }
             }
@@ -108,29 +94,21 @@ namespace PRubick
 
         #region Drawing
 
-        static void Drawing_OnEndScene(EventArgs args)
+        private static void Drawing_OnEndScene(EventArgs args)
         {
             if (!Game.IsInGame || myHero == null) return;
-            //
             if (myHero.ClassID != ClassID.CDOTA_Unit_Hero_Rubick) return;
-            //
-
-            var str = "[ KiKRee PRubick (" + VERSION + "): ";
-            str += enabled ? "Enabled" : "Disabled";
-            str += " ]";
-            str += " P - Toggle, Space - Auto steal (Hold)";
-
-            font.DrawText(null, str, 5, 40, Color.White);
+            if (menuOn) gui.Draw();
         }
 
         private static void Drawing_OnPostReset(EventArgs args)
         {
-            font.OnResetDevice();
+            _2DGeometry.GetFont().OnResetDevice();
         }
 
         private static void Drawing_OnPreReset(EventArgs args)
         {
-            font.OnLostDevice();
+            _2DGeometry.GetFont().OnLostDevice();
         }
 
         #endregion
@@ -139,30 +117,81 @@ namespace PRubick
 
         static void Game_OnUpdate(EventArgs args)
         {
-            if (!Game.IsInGame) { myHero = null; spellSteal = null; return; }
-            //
-            if (myHero == null) myHero = ObjectMgr.LocalHero;
-            //
+            if (!Game.IsInGame) { loaded = false; return; }
+            if (Game.GameState != GameState.Started) return;
+            #region If assembly not loaded
+            if (loaded == false)
+            {
+                gui = new EzGUI(Drawing.Width - 350, 50, "PRubick " + VERSION);
+                enabled = new EzElement(ElementType.CHECKBOX, "Enabled / Активен", true);
+                spcat = new EzElement(ElementType.CATEGORY, "Spell Steal / Кража скиллов", false);
+                stealIfHave = new EzElement(ElementType.CHECKBOX, "Steal if no cd / Воровать если нет кд [CHECKED]", false);
+                gui.AddMainElement(new EzElement(ElementType.TEXT, "Main / Главная", false));
+                gui.AddMainElement(enabled);
+                gui.AddMainElement(stealIfHave);
+                gui.AddMainElement(new EzElement(ElementType.TEXT, "Rubick", false));
+                gui.AddMainElement(spcat);
+                
+                myHero = ObjectMgr.LocalHero;
+                spellSteal = myHero.Spellbook.SpellR;
+                loaded = true;
+            }
+            #endregion
             if (myHero.ClassID != ClassID.CDOTA_Unit_Hero_Rubick) return;
             //
-            if (spellSteal == null) spellSteal = myHero.Spellbook.SpellR;
-            //
-            Hero[] enemies = ObjectMgr.GetEntities<Hero>()
-                .Where(
-            x => x.Team != myHero.Team && x.IsAlive && x.IsVisible && Utils.SleepCheck(x.ClassID.ToString()) && !x.IsIllusion).ToArray();
-            //
-            if (enabled && spaceHold)
+            if (enabled.isActive)
             {
+                Hero[] enemies = ObjectMgr.GetEntities<Hero>().Where(x => x.Team != myHero.Team && !x.IsIllusion() && x.IsAlive && x.IsVisible ).ToArray();
+                #region GUI Checks
+                if (Utils.SleepCheck("GUI_ABILITIES") && heroes != null)
+                {
+                    foreach (EzElement element in heroes.In)
+                    {
+                        foreach (EzElement element2 in element.In)
+                        {
+                            if (element2.isActive && !includedAbilities.Contains(element2.Content)) includedAbilities.Add(element2.Content);
+                            if (!element2.isActive && includedAbilities.Contains(element2.Content)) includedAbilities.Remove(element2.Content);
+                        }
+                    }
+                    Utils.Sleep(1000, "GUI_ABILITIES");
+                }
+
+                if (heroes == null)
+                {
+                    heroes = new EzElement(ElementType.CATEGORY, "Heroes / Герои", false);
+                    for (int i = 0; i < 21; i++)
+                    {
+                        var player = ObjectMgr.GetPlayerById((uint)i);
+                        if (player != null && player != ObjectMgr.LocalPlayer && player.Team != myHero.Team && myHero.IsAlive && player.ConnectionState == ConnectionState.Connected && player.Hero != null && player.Handle != null)
+                        {
+                            var enemy = player.Hero;
+                            if (enemy == null || enemy.Spellbook == null || enemy.Spellbook.Spells == null) continue;
+                            var hero = new EzElement(ElementType.CATEGORY, enemy.Name.Replace("_", "").Replace("npcdotahero", ""), false);
+                            foreach (Ability ability in enemy.Spellbook.Spells)
+                            {
+                                if (ability.AbilityBehavior == AbilityBehavior.Passive) continue;
+                                if (ability.AbilityType == AbilityType.Attribute) continue;
+                                bool ac = false;
+                                if (ability.AbilityType == AbilityType.Ultimate) { ac = true; includedAbilities.Add(ability.Name); }
+                                EzElement abElement = new EzElement(ElementType.CHECKBOX, ability.Name, ac);
+                                hero.In.Add(abElement);
+                            }
+                            heroes.In.Add(hero);
+                        }
+                    }
+                    spcat.In.Add(heroes);
+                }
+                #endregion
                 foreach (Hero enemy in enemies)
                 {
-                    if (!excludedHeroes.Contains(enemy.ClassID) && Utils.SleepCheck(enemy.ClassID.ToString()))
+                    if (Utils.SleepCheck(enemy.ClassID.ToString()))
                     {
                         foreach (Ability ability in enemy.Spellbook.Spells)
                         {
-                            if ((ability.AbilityType == AbilityType.Ultimate || includedAbilities.Contains(ability.Name)) && ability.CooldownLength - ability.Cooldown < ( (float)0.7 + ( Game.Ping / 1000 ) ) && !spellOnCooldown(ability.Name) && iCanSteal(enemy) && myHero.Spellbook.SpellD.Name != ability.Name && ability.CooldownLength != 0)
+                            if (includedAbilities.Contains(ability.Name) && ability.CooldownLength - ability.Cooldown <  (float)0.7 + ( Game.Ping /1000 ) && !spellOnCooldown(ability.Name) && iCanSteal(enemy) && myHero.Spellbook.SpellD.Name != ability.Name && ability.CooldownLength != 0)
                             {
-                                if (spellSteal.CanBeCasted())
-                                    spellSteal.UseAbility(enemy);
+                                if (stealIfHave.isActive == false && myHero.Spellbook.SpellD.Cooldown == 0 && includedAbilities.Contains(myHero.Spellbook.SpellD.Name)) continue;
+                                if (spellSteal.CanBeCasted()) spellSteal.UseAbility(enemy);
                             }
                         }
                         Utils.Sleep(125, enemy.ClassID.ToString());
