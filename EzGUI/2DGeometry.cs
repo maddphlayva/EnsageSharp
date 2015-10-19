@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 using SharpDX;
 using SharpDX.Direct3D9;
 
-namespace PRubick
+namespace ez
 {
     internal class _2DGeometry
     {

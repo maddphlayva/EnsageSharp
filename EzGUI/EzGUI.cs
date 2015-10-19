@@ -10,7 +10,7 @@ using Ensage.Common;
 using SharpDX;
 using SharpDX.Direct3D9;
 
-namespace PRubick
+namespace ez
 {
     #region Help classes
     enum ElementType
